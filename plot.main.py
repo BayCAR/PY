@@ -13,24 +13,24 @@ class MyApp(App):
         self.box = BoxLayout(orientation='vertical')
 
         # Instructions label
-        instructions = Label(text='Please input the parameters for creating the figure!', size_hint=(1, 0.1))
+        instructions = Label(text='Please input the parameters!', size_hint=(1, 0.1), font_size=55, halign='center')
         self.box.add_widget(instructions)
 
         # Container for input boxes
         input_box = BoxLayout(orientation='horizontal', size_hint=(1, 0.2))
 
         # Input box for mean
-        mean_input = TextInput(hint_text='Mean', size_hint=(0.5, None), height=40)
+        mean_input = TextInput(hint_text='Mean', size_hint=(0.5, None), height=199, font_size=88, halign='center')
         input_box.add_widget(mean_input)
 
         # Input box for std_dev
-        std_dev_input = TextInput(hint_text='Standard Deviation', size_hint=(0.5, None), height=40)
+        std_dev_input = TextInput(hint_text='Standard Deviation', size_hint=(0.5, None), height=199, font_size=88, halign='center')
         input_box.add_widget(std_dev_input)
 
         self.box.add_widget(input_box)
 
         # Create Plot button
-        button = Button(text='Create Plot', size_hint=(1, 0.2))
+        button = Button(text='Create Plot', size_hint=(1, 0.2), font_size=88)
         button.bind(on_release=lambda btn: self.create_plot(mean_input.text, std_dev_input.text))
         self.box.add_widget(button)
 
