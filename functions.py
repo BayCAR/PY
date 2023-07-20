@@ -105,7 +105,7 @@ def contour_image(image_name, backg=10):
 
     return contoured, f_contourred, approxx
 
-def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
+def sharpen(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
     """Return a sharpened version of the image, using an unsharp mask."""
     blurred = cv2.GaussianBlur(image, kernel_size, sigma)
     sharpened = float(amount + 1) * image - float(amount) * blurred
