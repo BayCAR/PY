@@ -5,8 +5,12 @@ import pytesseract
 import matplotlib as plt
 import imageio
 import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from scipy.stats import norm
+from statsmodels.formula.api import ols
 
-def displayf(im_path):
+def fdisplay(im_path):
     dpi = 80
     im_data = imageio.imread(im_path)
 
@@ -117,28 +121,29 @@ def sharpen(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
         np.copyto(sharpened, image, where=low_contrast_mask)
     return sharpened
 
-def fcontour_filter(image_path, subtraction=15):
+def fcontour(image_path, subtraction=15):
     # Load the image
-    image = cv2.imread("image1.jpg")
+    image = cv2.imread(image_path)
     height, width, channels = image.shape
 
     # Convert the image to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    gray = sharpen(gray)
     image = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
 
     black_pixel_counts = []
 
     thresholded_image = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51,
                                               subtraction)
-    _, thresholded_image2 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, thresholded_imageo = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # thresholded_image = cv2.bitwise_or(thresholded_image, thresholded_image2)
+    # thresholded_image = cv2.bitwise_or(thresholded_image, thresholded_imageo)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 3))  # Adjust the kernel size as needed
     # Perform the opening operation
     thresholded_image = cv2.morphologyEx(thresholded_image, cv2.MORPH_OPEN, kernel)
 
-    image = cv2.cvtColor(thresholded_image, cv2.COLOR_GRAY2RGB)
+    imageo = cv2.cvtColor(thresholded_image, cv2.COLOR_GRAY2RGB)
     # Perform morphological dilation
     kernel_size = (2, 1)  # (Width, Height)
 
@@ -146,7 +151,7 @@ def fcontour_filter(image_path, subtraction=15):
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, kernel_size)
 
     # Perform one-sided dilation with the recalculated weighted center
-    dilated = 255 - image.copy()  # Create a copy of the original image
+    dilated = 255 - imageo.copy()  # Create a copy of the original image
     for _ in range(20):  # Number of iterations for dilation
         # Calculate the weighted center of the current kernel
         kernel_sum = np.sum(kernel)
@@ -189,11 +194,8 @@ def fcontour_filter(image_path, subtraction=15):
             num_contours += 1
 
     # Draw the filtered contours on the image
-    contour_image = image.copy()
+    contour_image = imageo.copy()
     cv2.drawContours(contour_image, filtered_contours, -1, (0, 0, 255), 2)
-
-    # Load the image and other preprocessing steps...
-    # (Your previous code up to the point where you have the filtered_contours)
 
     # Create a blank image to hold the filled contours
     filled_contour_image = np.zeros_like(contour_image)
@@ -202,5 +204,89 @@ def fcontour_filter(image_path, subtraction=15):
     for contour in filtered_contours:
         cv2.drawContours(filled_contour_image, [contour], 0, (0, 255, 255), thickness=cv2.FILLED)
 
-    return contour_image, filled_contour_image, image
+    return contour_image, filled_contour_image, imageo, filtered_contours
+
+
+
+
+
+def cluster_regression(data_file_path, kluster=12, pvari=1000):
+    # Read data from the CSV file
+    data = pd.read_csv(data_file_path)
+    kluster = kluster
+    y = data["y"]
+    x = data[["intercept", "x", "x2"]]
+
+    sdd = np.full(kluster, 1000)
+    pii = np.full(kluster, 1)
+    pii0 = pii * 9
+    n_n = data.shape[0]
+    inc = np.empty(n_n)
+
+    pvar = np.diag([pvari, pvari, pvari])
+
+    cbeta = np.percentile(y, np.linspace(0, 100, kluster))
+    pBeta = np.vstack((cbeta, np.linspace(0, 1e-6, kluster), np.linspace(0, 1e-10, kluster)))
+    Beta = pBeta
+    T = np.zeros((n_n, kluster))
+
+    for i in range(30):
+        for j in range(kluster):
+            T[:, j] = pii[j] * norm.pdf(y - np.dot(x[['intercept', 'x', 'x2']], Beta[:, j]), 0, sdd[j])
+
+        row_sums = T.sum(axis=1)
+        T = T / row_sums[:, np.newaxis]
+        pii = np.sum(T, axis=0) / n_n
+        if len(pii) == len(pii0):
+            if np.sum(pii - pii0) == 0 and i > 3:
+                break
+
+        pii0 = pii
+        kluster0 = kluster
+        ww = np.empty(n_n)
+        max_column_indices = np.argmax(T, axis=1)
+        ww[:] = max_column_indices
+        tbww = pd.Series(ww).value_counts()
+        print(tbww)
+        grps = tbww.index.astype(int)
+        kluster = len(grps)
+        pii = pii[grps]
+        Beta = Beta[:, grps]
+        T = T[:, grps]
+        print(i)
+
+        for j in range(kluster - 1, -1, -1):
+            for w in range(n_n):
+                inc[w] = T[w, j] == np.max(T[w, :])
+
+            inc_array = np.array(inc)  # Convert inc to a NumPy array
+            x_inc = x[inc == 1]
+            x_inc = x_inc[['intercept', 'x', 'x2']]
+            y_inc = y[inc == 1]
+            x_inc_T = x_inc.T
+
+            Beta[:, j] = np.dot(np.linalg.inv(np.linalg.inv(pvar) + np.dot(x_inc_T, x_inc)), (np.dot(np.linalg.inv(pvar),
+                                                                                                   pBeta[:, j]) + np.dot(x_inc_T, y_inc)))
+            pBeta = Beta
+            sdd[j] = np.apply_along_axis(np.std, 0, y_inc - np.dot(x_inc, Beta[:, j]))
+
+            if i > 5:
+                xx = pd.DataFrame(x)
+                xx['y'] = y
+                xx['ww'] = pd.Categorical(ww)
+                # Create the linear regression model
+                lm = ols('y ~ x + x2 + C(ww)', data=xx).fit()
+                sm = lm.summary()
+                coef = lm.params
+
+                Beta[0, 0] = coef['Intercept']
+                Beta[1, :] = coef['x']
+                Beta[2, :] = coef['x2']
+                Beta[0, 1:] = [coef[0] + m for m in coef[1:(len(coef)-2)]]
+
+        mean_sdd = np.mean(sdd)
+        # Repeat the mean value 'kluster' times to create the new 'sdd' array
+        sdd = np.full(kluster, mean_sdd)
+
+    return Beta, ww
 
