@@ -1,0 +1,9 @@
+salloc -t 8:00:00 -A loni_sim -p workq
+
+module load gcc
+module load r
+
+
+
+conda activate /work/shpyang/soft 
+
